@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "id": "saikomantisu.todos",
+  "name": "Daily Todos",
+  "version": "1.0.0",
+  "author": "Saikomantisu",
+  "description": "The Big 3 plus everyday todos, a day progress bar, and a mascot that reacts to how the day is going",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Daily Todos",
+    "description": "Big 3 + todos with a day progress bar and a mood mascot",
+    "category": "Productivity",
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "dayStart": 8,
+      "dayEnd": 22,
+      "showCount": true
+    },
+    "schema": [
+      { "key": "dayStart", "type": "number", "label": "Day starts (hour)" },
+      { "key": "dayEnd", "type": "number", "label": "Day ends (hour)" },
+      { "key": "showCount", "type": "boolean", "label": "Show done/total count" }
+    ]
+  }
+}
