@@ -12,7 +12,7 @@ import "Model.js" as Model
 // anything actually gets edited, and where the progress bar lives.
 BarWidget {
   id: root
-  moduleName: "saikomantisu.todos"
+  moduleName: "io.github.saikomantisu.todos"
 
   readonly property int dayStartHour: Math.round(Number(setting("dayStart", 8)))
   readonly property int dayEndHour: Math.round(Number(setting("dayEnd", 22)))
@@ -94,7 +94,7 @@ BarWidget {
   }
 
   IpcHandler {
-    target: "saikomantisu.todos"
+    target: "io.github.saikomantisu.todos"
 
     function open(): void { root.open() }
     function close(): void { root.close() }

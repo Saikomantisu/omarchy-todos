@@ -10,7 +10,7 @@ import "Model.js" as Model
 // them plus the editing affordances.
 Panel {
   id: root
-  moduleName: "saikomantisu.todos"
+  moduleName: "io.github.saikomantisu.todos"
   manageIpc: false
 
   property var anchorItem: null

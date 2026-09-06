@@ -51,11 +51,11 @@ Item {
     // already have and, crucially, write nothing: persisting a bad read is how
     // a torn file turns into lost history.
     if (!read.ok) {
-      console.warn("saikomantisu.todos: history file did not parse; keeping the loaded state")
+      console.warn("io.github.saikomantisu.todos: history file did not parse; keeping the loaded state")
       return
     }
     if (read.empty && Model.dayCount(root.state) > 0) {
-      console.warn("saikomantisu.todos: history file read back empty; keeping the loaded state")
+      console.warn("io.github.saikomantisu.todos: history file read back empty; keeping the loaded state")
       return
     }
 

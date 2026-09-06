@@ -12,7 +12,7 @@ you glance at a face. Nothing done at 6pm looks like nothing done at 6pm.
 
 ```bash
 omarchy plugin add https://github.com/Saikomantisu/omarchy-todos.git --enable --yes
-omarchy bar move saikomantisu.todos --after omarchy.clock
+omarchy bar move io.github.saikomantisu.todos --after omarchy.clock
 ```
 
 Plugins run as unsandboxed code inside `omarchy-shell`, so read the source
@@ -21,7 +21,7 @@ first — it is five QML files and a JS module, and it is meant to be read.
 ### Removing it
 
 ```bash
-omarchy plugin remove saikomantisu.todos --yes
+omarchy plugin remove io.github.saikomantisu.todos --yes
 ```
 
 That takes the widget out of the bar and deletes the plugin. Your history is
@@ -116,17 +116,17 @@ counting the mornings it has survived.
 The plugin registers an IPC target, so anything can drive it:
 
 ```bash
-omarchy-shell saikomantisu.todos status              # "2/7 Worried"
-omarchy-shell saikomantisu.todos add "Water plants"
-omarchy-shell saikomantisu.todos big3 "Ship the thing"
-omarchy-shell saikomantisu.todos toggle              # panel
-omarchy-shell saikomantisu.todos capture             # panel, focused on the add field
+omarchy-shell io.github.saikomantisu.todos status              # "2/7 Worried"
+omarchy-shell io.github.saikomantisu.todos add "Water plants"
+omarchy-shell io.github.saikomantisu.todos big3 "Ship the thing"
+omarchy-shell io.github.saikomantisu.todos toggle              # panel
+omarchy-shell io.github.saikomantisu.todos capture             # panel, focused on the add field
 ```
 
 `capture` is the one worth binding — in `~/.config/hypr/bindings.lua`:
 
 ```lua
-o.bind("SUPER", "T", "omarchy-shell saikomantisu.todos capture")
+o.bind("SUPER", "T", "omarchy-shell io.github.saikomantisu.todos capture")
 ```
 
 ## Settings
@@ -134,7 +134,7 @@ o.bind("SUPER", "T", "omarchy-shell saikomantisu.todos capture")
 Inline on the widget's entry in `~/.config/omarchy/shell.json`:
 
 ```json
-{ "id": "saikomantisu.todos", "dayStart": 8, "dayEnd": 22, "showCount": true }
+{ "id": "io.github.saikomantisu.todos", "dayStart": 8, "dayEnd": 22, "showCount": true }
 ```
 
 `dayStart` / `dayEnd` are the working window progress is judged against.
