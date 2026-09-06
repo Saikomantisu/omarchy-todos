@@ -4,6 +4,7 @@
   "name": "Daily Todos",
   "version": "1.0.0",
   "author": "Saikomantisu",
+  "license": "MIT",
   "description": "The Big 3 plus everyday todos, a day progress bar, and a mascot that reacts to how the day is going",
   "kinds": [
     "bar-widget"
@@ -23,9 +24,21 @@
       "showCount": true
     },
     "schema": [
-      { "key": "dayStart", "type": "number", "label": "Day starts (hour)" },
-      { "key": "dayEnd", "type": "number", "label": "Day ends (hour)" },
-      { "key": "showCount", "type": "boolean", "label": "Show done/total count" }
+      {
+        "key": "dayStart",
+        "type": "number",
+        "label": "Day starts (hour)"
+      },
+      {
+        "key": "dayEnd",
+        "type": "number",
+        "label": "Day ends (hour)"
+      },
+      {
+        "key": "showCount",
+        "type": "boolean",
+        "label": "Show done/total count"
+      }
     ]
   }
 }

@@ -18,7 +18,29 @@ omarchy bar move saikomantisu.todos --after omarchy.clock
 Plugins run as unsandboxed code inside `omarchy-shell`, so read the source
 first — it is five QML files and a JS module, and it is meant to be read.
 
-Requires Omarchy with the Quickshell-based shell (`omarchy-shell`).
+### Removing it
+
+```bash
+omarchy plugin remove saikomantisu.todos --yes
+```
+
+That takes the widget out of the bar and deletes the plugin. Your history is
+deliberately left behind, so reinstalling picks up where you left off. To
+delete that too:
+
+```bash
+rm -rf ~/.local/share/omarchy-todos
+```
+
+### Requirements
+
+Omarchy with the Quickshell-based shell (`omarchy-shell`). Nothing else — no
+runtime, no daemon, no account, no network access. The only external commands
+it ever runs are `mkdir` (to create its own data directory) and Omarchy's own
+`omarchy-notification-send`, used once a day at most to tell you what got
+carried over. It writes to exactly one path,
+`~/.local/share/omarchy-todos/`, plus its own entry in `shell.json` when you
+right-click the widget to toggle the count.
 
 ## The bar widget
 
@@ -50,7 +72,7 @@ Stress also shifts Pip's colour from your theme's foreground toward its urgent
 colour, so the mood lands before you have parsed the face.
 
 Pip is drawn, not shipped as an image: a solid silhouette with the features
-punched out of it. Outlined faces turn to mud at 22px; negative space does
+punched out of it. Outlined faces turn to mud at 19px; negative space does
 not. That means Pip follows your theme, and is the same character at bar size
 and at panel size.
 
