@@ -624,7 +624,16 @@ Panel {
     readonly property bool editing: item ? root.editingId === item.id : false
     readonly property bool hot: cursor || hover.containsMouse
 
-    implicitHeight: Style.spacing.popupRowHeight
+    // A todo is written, not tweeted at: the label wraps, so the row is as
+    // tall as the text needs. One line still measures exactly a popup row —
+    // the padding is whatever a single line leaves over — and the checkbox,
+    // the ordinal, and the row actions stay pinned to that first line so a
+    // three-line todo still reads as one item.
+    readonly property real lineHeight: label.lineCount > 0 ? label.contentHeight / label.lineCount : label.implicitHeight
+    readonly property real verticalPad: Math.max(0, (Style.spacing.popupRowHeight - lineHeight) / 2)
+
+    implicitHeight: Math.max(Style.spacing.popupRowHeight,
+                             Math.max(label.implicitHeight, box.height) + verticalPad * 2)
     height: implicitHeight
 
     Rectangle {
@@ -657,16 +666,19 @@ Panel {
     }
 
     Row {
+      id: content
       anchors.left: parent.left
       anchors.leftMargin: Style.space(2)
       anchors.right: actions.left
       anchors.rightMargin: Style.space(6)
-      anchors.verticalCenter: parent.verticalCenter
+      anchors.top: parent.top
+      anchors.topMargin: row.verticalPad
       spacing: Style.space(9)
 
       Text {
         visible: row.ordinal > 0
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.top: parent.top
+        anchors.topMargin: Math.round(Math.max(0, (row.lineHeight - height) / 2))
         textFormat: Text.PlainText
         text: row.ordinal + "."
         color: root.fg
@@ -677,7 +689,8 @@ Panel {
 
       Rectangle {
         id: box
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.top: parent.top
+        anchors.topMargin: Math.round(Math.max(0, (row.lineHeight - height) / 2))
         width: Style.space(15)
         height: width
         radius: row.kind === "big3" ? width / 2 : (Style.cornerRadius > 0 ? Style.cornerRadius : Style.space(3))
@@ -701,38 +714,44 @@ Panel {
 
       Text {
         id: label
-        visible: !row.editing
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.top: parent.top
         width: Math.max(0, parent.width - x)
         textFormat: Text.PlainText
         text: row.item ? row.item.text : ""
         color: root.fg
-        opacity: row.done ? 0.45 : 1
+        // Hidden by opacity rather than `visible` while the editor is up: the
+        // label stays laid out, so it keeps measuring the row and keeps giving
+        // the editor below a position to sit at.
+        opacity: row.editing ? 0 : (row.done ? 0.45 : 1)
         font.family: root.family
         font.pixelSize: Style.font.body
         font.strikeout: row.done
-        elide: Text.ElideRight
+        wrapMode: Text.Wrap
+      }
+    }
+
+    // The editor is a single line laid over the label rather than a child of
+    // the row above: the label keeps its measured geometry, so opening an edit
+    // on a wrapped todo doesn't collapse the row and shove the list below it.
+    TextField {
+      id: editor
+      visible: row.editing
+      x: content.x + label.x
+      y: content.y + Math.round((row.lineHeight - height) / 2)
+      width: label.width
+      foreground: root.fg
+      accent: root.bar ? root.bar.foreground : Color.accent
+      verticalPadding: Style.space(2)
+      font.pixelSize: Style.font.body
+
+      onVisibleChanged: if (visible) {
+        text = row.item ? row.item.text : ""
+        Qt.callLater(function() { editor.forceActiveFocus(); editor.selectAll() })
       }
 
-      TextField {
-        id: editor
-        visible: row.editing
-        anchors.verticalCenter: parent.verticalCenter
-        width: Math.max(0, parent.width - x)
-        foreground: root.fg
-        accent: root.bar ? root.bar.foreground : Color.accent
-        verticalPadding: Style.space(2)
-        font.pixelSize: Style.font.body
-
-        onVisibleChanged: if (visible) {
-          text = row.item ? row.item.text : ""
-          Qt.callLater(function() { editor.forceActiveFocus(); editor.selectAll() })
-        }
-
-        Keys.onEscapePressed: root.endEdit(undefined)
-        onAccepted: root.endEdit(text)
-        onActiveFocusChanged: if (!activeFocus && row.editing) root.endEdit(text)
-      }
+      Keys.onEscapePressed: root.endEdit(undefined)
+      onAccepted: root.endEdit(text)
+      onActiveFocusChanged: if (!activeFocus && row.editing) root.endEdit(text)
     }
 
     // Carry badge plus the row actions. A todo that has survived several
@@ -740,7 +759,8 @@ Panel {
     Row {
       id: actions
       anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
+      anchors.top: parent.top
+      anchors.topMargin: row.verticalPad + Math.round(Math.max(0, (row.lineHeight - height) / 2))
       spacing: Style.space(6)
 
       Text {
