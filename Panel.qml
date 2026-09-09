@@ -660,9 +660,21 @@ Panel {
       }
       onClicked: function(mouse) {
         if (mouse.button === Qt.RightButton) root.beginEdit(row.kind, row.item.id)
-        else if (root.store) root.store.toggle(row.kind, row.item.id)
+        else toggleTimer.restart()
       }
-      onDoubleClicked: root.beginEdit(row.kind, row.item.id)
+      onDoubleClicked: {
+        toggleTimer.stop()
+        root.beginEdit(row.kind, row.item.id)
+      }
+
+      // A left click toggles, but a double click is two left clicks, and
+      // onClicked always fires before onDoubleClicked — so the toggle is
+      // delayed long enough to be cancelled if a second click arrives.
+      Timer {
+        id: toggleTimer
+        interval: Qt.styleHints.mouseDoubleClickInterval
+        onTriggered: if (root.store) root.store.toggle(row.kind, row.item.id)
+      }
     }
 
     Row {
