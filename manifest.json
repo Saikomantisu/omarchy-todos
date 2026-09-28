@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "io.github.saikomantisu.todos",
   "name": "Daily Todos",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "author": "Saikomantisu",
   "license": "MIT",
-  "description": "The Big 3 plus everyday todos, a day progress bar, and a mascot that reacts to how the day is going",
+  "description": "The Big 3 plus everyday todos, a Later list, a day progress bar, and a mascot that reacts to how the day is going",
   "kinds": [
     "bar-widget"
   ],

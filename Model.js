@@ -7,7 +7,8 @@
 //
 // The shape persisted to disk:
 //
-//   { "version": 1, "days": { "2026-09-06": { date, big3: [item], todos: [item] } } }
+//   { "version": 1, "days": { "2026-09-06": { date, big3: [item], todos: [item] } },
+//     "later": [item] }
 //
 // and an item:
 //
@@ -16,6 +17,11 @@
 // Days are never rewritten once they are in the past, so the file doubles as
 // the history: an unfinished todo stays unfinished on the day it was missed
 // and is *copied* forward, rather than moved.
+//
+// `later` is the one list that belongs to no day: things you mean to do but
+// not today. It never carries, never counts toward a day's stats, and so never
+// moves the mascot. Pulling a note into today moves it (same id); so does
+// sending a todo back.
 
 var VERSION = 1
 
@@ -26,6 +32,7 @@ var BIG3_WEIGHT = 2
 
 var BIG3_SLOTS = 3
 var MAX_TODOS = 100
+var MAX_LATER = 200
 var MAX_TEXT = 200
 var HISTORY_DAYS = 400
 
@@ -80,7 +87,7 @@ function emptyDay(key) {
 }
 
 function emptyState() {
-  return { version: VERSION, days: {} }
+  return { version: VERSION, days: {}, later: [] }
 }
 
 function sanitizeItem(value) {
@@ -139,6 +146,7 @@ function parseState(raw) {
     if (!isDayKey(key)) continue
     state.days[key] = sanitizeDay(days[key], key)
   }
+  state.later = sanitizeList(parsed.later, MAX_LATER)
   return state
 }
 
@@ -173,7 +181,8 @@ function readState(raw) {
 }
 
 function serializeState(state) {
-  return JSON.stringify({ version: VERSION, days: (state || emptyState()).days }, null, 2) + "\n"
+  var source = state || emptyState()
+  return JSON.stringify({ version: VERSION, days: source.days, later: laterOf(source) }, null, 2) + "\n"
 }
 
 // --------------------------------------------------------- state transitions
@@ -206,7 +215,15 @@ function withDay(state, key, day) {
   var days = {}
   for (var k in state.days) days[k] = state.days[k]
   days[key] = day
-  return { version: VERSION, days: days }
+  return { version: VERSION, days: days, later: laterOf(state) }
+}
+
+function laterOf(state) {
+  return (state && state.later) || []
+}
+
+function withLater(state, list) {
+  return { version: VERSION, days: state.days, later: list }
 }
 
 function dayOf(state, key) {
@@ -281,7 +298,7 @@ function prune(state) {
   var keep = keys.slice(keys.length - HISTORY_DAYS)
   var days = {}
   for (var i = 0; i < keep.length; i++) days[keep[i]] = state.days[keep[i]]
-  return { version: VERSION, days: days }
+  return { version: VERSION, days: days, later: laterOf(state) }
 }
 
 function listOf(day, kind) {
@@ -292,6 +309,20 @@ function setList(day, kind, list) {
   if (kind === "big3") day.big3 = list
   else day.todos = list
   return day
+}
+
+// A copy of one list to edit, and the state with that list put back. Later has
+// no day, so these are what let remove/rename/reorder treat it like any other.
+function editableList(state, key, kind) {
+  var source = kind === "later" ? laterOf(state) : listOf(dayOf(state, key), kind)
+  var out = []
+  for (var i = 0; i < source.length; i++) out.push(cloneItem(source[i]))
+  return out
+}
+
+function withList(state, key, kind, list) {
+  if (kind === "later") return withLater(state, list)
+  return withDay(state, key, setList(cloneDay(dayOf(state, key)), kind, list))
 }
 
 function addItem(state, key, kind, text, nowIso) {
@@ -329,25 +360,23 @@ function toggleItem(state, key, kind, id, nowIso) {
 }
 
 function removeItem(state, key, kind, id) {
-  var day = cloneDay(dayOf(state, key))
-  var list = listOf(day, kind)
+  var list = editableList(state, key, kind)
   var next = []
   for (var i = 0; i < list.length; i++) if (list[i].id !== id) next.push(list[i])
   if (next.length === list.length) return state
-  return withDay(state, key, setList(day, kind, next))
+  return withList(state, key, kind, next)
 }
 
 function renameItem(state, key, kind, id, text) {
   var clean = cleanText(text)
   if (clean.length === 0) return removeItem(state, key, kind, id)
 
-  var day = cloneDay(dayOf(state, key))
-  var list = listOf(day, kind)
+  var list = editableList(state, key, kind)
   for (var i = 0; i < list.length; i++) {
     if (list[i].id !== id) continue
     if (list[i].text === clean) return state
     list[i].text = clean
-    return withDay(state, key, day)
+    return withList(state, key, kind, list)
   }
   return state
 }
@@ -372,8 +401,7 @@ function moveItem(state, key, fromKind, id) {
 }
 
 function reorderItem(state, key, kind, id, delta) {
-  var day = cloneDay(dayOf(state, key))
-  var list = listOf(day, kind)
+  var list = editableList(state, key, kind)
   for (var i = 0; i < list.length; i++) {
     if (list[i].id !== id) continue
     var target = i + delta
@@ -381,7 +409,7 @@ function reorderItem(state, key, kind, id, delta) {
     var item = list[i]
     list[i] = list[target]
     list[target] = item
-    return withDay(state, key, day)
+    return withList(state, key, kind, list)
   }
   return state
 }
@@ -393,6 +421,84 @@ function clearCompleted(state, key) {
   if (kept.length === day.todos.length) return state
   day.todos = kept
   return withDay(state, key, day)
+}
+
+// -------------------------------------------------------------------- later
+
+function addLater(state, text, nowIso) {
+  var clean = cleanText(text)
+  if (clean.length === 0) return state
+  var list = editableList(state, "", "later")
+  if (list.length >= MAX_LATER) return state
+
+  list.push({
+    id: newId(),
+    text: clean,
+    done: false,
+    createdAt: String(nowIso || ""),
+    completedAt: "",
+    firstSeen: "",
+    carriedFrom: "",
+    carries: 0
+  })
+  return withLater(state, list)
+}
+
+// Later -> today, as a regular todo. The id travels with it, so it is the same
+// thing moving, not a copy; from here on ordinary carry-over applies.
+function pullFromLater(state, key, id) {
+  var later = editableList(state, key, "later")
+  var day = cloneDay(dayOf(state, key))
+  if (day.todos.length >= MAX_TODOS) return state
+
+  for (var i = 0; i < later.length; i++) {
+    if (later[i].id !== id) continue
+    var item = later[i]
+    later.splice(i, 1)
+    item.firstSeen = key
+    day.todos.push(item)
+    return withLater(withDay(state, key, day), later)
+  }
+  return state
+}
+
+// Today -> later. "Not today after all" is a fresh start, so the carry record
+// goes. A finished item already happened and stays on its day.
+function deferItem(state, key, kind, id) {
+  if (kind === "later") return state
+  var list = editableList(state, key, kind)
+  var later = editableList(state, key, "later")
+  if (later.length >= MAX_LATER) return state
+
+  for (var i = 0; i < list.length; i++) {
+    if (list[i].id !== id) continue
+    if (list[i].done) return state
+    var item = list[i]
+    list.splice(i, 1)
+    item.completedAt = ""
+    item.firstSeen = ""
+    item.carriedFrom = ""
+    item.carries = 0
+    later.push(item)
+    return withLater(withList(state, key, kind, list), later)
+  }
+  return state
+}
+
+// Whole days since the oldest note was parked, or -1 when there are none. The
+// panel shows it dimly; it is information, not a nag.
+function laterAge(state, now) {
+  var list = laterOf(state)
+  var oldest = ""
+  for (var i = 0; i < list.length; i++) {
+    var at = list[i].createdAt
+    if (at && (oldest === "" || at < oldest)) oldest = at
+  }
+  if (list.length === 0) return -1
+  if (oldest === "") return 0
+  var then = new Date(oldest)
+  if (isNaN(then.getTime())) return 0
+  return Math.max(0, Math.floor((now.getTime() - then.getTime()) / 86400000))
 }
 
 // ----------------------------------------------------------------- measuring

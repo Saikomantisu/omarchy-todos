@@ -36,6 +36,10 @@ Item {
 
   readonly property bool big3Full: today.big3.length >= 3
 
+  // Parked for some other day. Deliberately absent from stats and mood.
+  readonly property var later: state.later || []
+  readonly property int laterAge: Model.laterAge(state, now)
+
   signal rolledOver(int carried)
 
   function nowIso() {
@@ -123,6 +127,24 @@ Item {
 
   function reorder(kind, id, delta) {
     mutate(Model.reorderItem(root.state, root.todayKey, kind, id, delta))
+  }
+
+  // Returns whether the note was stored, so a caller can confirm it.
+  function addLater(text) {
+    var next = Model.addLater(root.state, text, nowIso())
+    if (next === root.state) return false
+    mutate(next)
+    return true
+  }
+
+  // Later -> today, as a regular todo.
+  function pull(id) {
+    mutate(Model.pullFromLater(root.state, root.todayKey, id))
+  }
+
+  // Today -> later.
+  function defer(kind, id) {
+    mutate(Model.deferItem(root.state, root.todayKey, kind, id))
   }
 
   function clearCompleted() {

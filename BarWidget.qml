@@ -104,6 +104,12 @@ BarWidget {
     function capture(): void { root.openForCapture() }
     function add(text: string): void { store.add("todos", text) }
     function big3(text: string): void { store.add("big3", text) }
+    // Quiet capture: stored and confirmed, but nothing opens and today's
+    // count does not move.
+    function later(text: string): void {
+      if (!store.addLater(text)) return
+      Util.execArgv(["omarchy-notification-send", "--app-name", "Todos", "Saved for later", Model.cleanText(text)])
+    }
     function status(): string {
       return store.stats.done + "/" + store.stats.total + " " + store.mood.label
     }

@@ -4,7 +4,8 @@ import qs.Ui
 import "Model.js" as Model
 
 // The day: Pip at full size, the progress bar, the Big 3, everything else,
-// and a two-week strip of what the days behind this one looked like.
+// the Later list folded away underneath, and a two-week strip of what the days
+// behind this one looked like.
 //
 // The bar widget owns the store and the IPC target; this panel is a view over
 // them plus the editing affordances.
@@ -29,6 +30,11 @@ Panel {
   readonly property int streakDays: store ? store.streak : 0
   readonly property var lifetime: store ? store.lifetime : ({ completed: 0, planned: 0, days: 0 })
   readonly property date now: store ? store.now : new Date()
+  readonly property var later: store ? store.later : []
+  readonly property int laterAge: store ? store.laterAge : -1
+
+  // Later stays folded unless asked for: it is out of sight on purpose.
+  property bool laterOpen: false
 
   readonly property color fg: bar ? bar.foreground : Color.foreground
   readonly property string family: bar ? bar.fontFamily : Style.font.family
@@ -45,6 +51,7 @@ Panel {
     var i
     for (i = 0; i < today.big3.length; i++) out.push({ kind: "big3", id: today.big3[i].id })
     for (i = 0; i < today.todos.length; i++) out.push({ kind: "todos", id: today.todos[i].id })
+    if (laterOpen) for (i = 0; i < later.length; i++) out.push({ kind: "later", id: later[i].id })
     return out
   }
 
@@ -66,9 +73,12 @@ Panel {
     cursorIndex = Math.max(0, Math.min(rows.length - 1, cursorIndex + delta))
   }
 
+  // A note has nothing to tick off; activating it means "do it today".
   function activateCursor() {
     var row = cursorRow()
-    if (row && store) store.toggle(row.kind, row.id)
+    if (!row || !store) return
+    if (row.kind === "later") store.pull(row.id)
+    else store.toggle(row.kind, row.id)
   }
 
   function deleteCursor() {
@@ -80,7 +90,20 @@ Panel {
 
   function shiftCursor() {
     var row = cursorRow()
-    if (row && store) store.shift(row.kind, row.id)
+    if (row && store && row.kind !== "later") store.shift(row.kind, row.id)
+  }
+
+  // Today -> later, or later -> today, whichever side the cursor is on.
+  function parkCursor() {
+    var row = cursorRow()
+    if (!row || !store) return
+    if (row.kind === "later") store.pull(row.id)
+    else store.defer(row.kind, row.id)
+  }
+
+  function captureLater() {
+    laterOpen = true
+    Qt.callLater(function() { if (root.opened) laterInput.focusInput() })
   }
 
   function reorderCursor(delta) {
@@ -135,6 +158,7 @@ Panel {
   onOpenedChanged: {
     if (opened) {
       cursorIndex = -1
+      laterOpen = false
       if (captureRequested) Qt.callLater(function() { if (root.opened) todoInput.focusInput() })
     } else {
       captureRequested = false
@@ -159,7 +183,7 @@ Panel {
       anchors.fill: parent
       // Any live text input owns the keyboard; otherwise typing "j" in a todo
       // would move the cursor instead of writing a j.
-      blocked: root.editingId !== "" || big3Input.inputFocused || todoInput.inputFocused
+      blocked: root.editingId !== "" || big3Input.inputFocused || todoInput.inputFocused || laterInput.inputFocused
 
       onMoveRequested: function(dx, dy) {
         if (dy !== 0) root.moveCursor(dy)
@@ -172,6 +196,8 @@ Panel {
       onTextKey: function(text) {
         if (text === "a") { todoInput.focusInput(); return }
         if (text === "b") { big3Input.focusInput(); return }
+        if (text === "l") { root.captureLater(); return }
+        if (text === "t") { root.parkCursor(); return }
         if (text === "e") { var row = root.cursorRow(); if (row) root.beginEdit(row.kind, row.id); return }
         if (text === "K") { root.reorderCursor(-1); return }
         if (text === "J") { root.reorderCursor(1); return }
@@ -510,6 +536,84 @@ Panel {
 
         PanelSeparator { foreground: root.fg }
 
+        // ---------- later ----------
+        // Folded by default: a count, and how long the oldest note has waited
+        // once that is over a week. Information, never a nag.
+        Column {
+          width: parent.width
+          spacing: Style.space(6)
+
+          Item {
+            width: parent.width
+            implicitHeight: laterHeader.implicitHeight
+
+            PanelSectionHeader {
+              id: laterHeader
+              anchors.left: parent.left
+              text: (root.laterOpen ? "▾ " : "▸ ") + "LATER" + (root.later.length > 0 ? " · " + root.later.length : "")
+              foreground: root.fg
+              fontFamily: root.family
+            }
+
+            Text {
+              anchors.right: parent.right
+              anchors.verticalCenter: laterHeader.verticalCenter
+              visible: root.laterAge >= 7
+              textFormat: Text.PlainText
+              text: "oldest " + (root.laterAge >= 14 ? Math.floor(root.laterAge / 7) + "w" : root.laterAge + "d")
+              color: Qt.darker(root.fg, 1.7)
+              font.family: root.family
+              font.pixelSize: Style.font.caption
+            }
+
+            MouseArea {
+              anchors.fill: parent
+              anchors.margins: -Style.space(4)
+              cursorShape: Qt.PointingHandCursor
+              onClicked: root.laterOpen = !root.laterOpen
+            }
+          }
+
+          Flickable {
+            visible: root.laterOpen && root.later.length > 0
+            width: parent.width
+            height: visible ? Math.min(laterList.implicitHeight, Style.space(162)) : 0
+            contentHeight: laterList.implicitHeight
+            clip: true
+            boundsBehavior: Flickable.StopAtBounds
+            interactive: contentHeight > height
+
+            Column {
+              id: laterList
+              width: parent.width
+
+              Repeater {
+                model: root.later
+
+                ItemRow {
+                  required property var modelData
+                  required property int index
+                  width: laterList.width
+                  kind: "later"
+                  item: modelData
+                  ordinal: 0
+                }
+              }
+            }
+          }
+
+          AddRow {
+            id: laterInput
+            visible: root.laterOpen
+            width: column.width
+            placeholder: "Park something for later…"
+            ordinal: 0
+            onSubmitted: function(text) { if (root.store) root.store.addLater(text) }
+          }
+        }
+
+        PanelSeparator { foreground: root.fg }
+
         // ---------- history ----------
         Column {
           width: parent.width
@@ -598,7 +702,7 @@ Panel {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: "↑↓ move · space done · e edit · x delete · a add"
+          text: "↑↓ move · space done · e edit · x delete · a add · t later/today · l later"
           color: Qt.darker(root.fg, 1.7)
           font.family: root.family
           font.pixelSize: Style.font.caption
@@ -619,6 +723,7 @@ Panel {
     property var item: null
     property int ordinal: 0
 
+    readonly property bool later: kind === "later"
     readonly property bool done: item ? item.done === true : false
     readonly property bool cursor: item ? root.isCursor(kind, item.id) : false
     readonly property bool editing: item ? root.editingId === item.id : false
@@ -673,7 +778,11 @@ Panel {
       Timer {
         id: toggleTimer
         interval: Qt.styleHints.mouseDoubleClickInterval
-        onTriggered: if (root.store) root.store.toggle(row.kind, row.item.id)
+        onTriggered: {
+          if (!root.store) return
+          if (row.later) root.store.pull(row.item.id)
+          else root.store.toggle(row.kind, row.item.id)
+        }
       }
     }
 
@@ -699,8 +808,26 @@ Panel {
         font.pixelSize: Style.font.bodySmall
       }
 
+      // A parked note has nothing to tick, so it gets a dot, not a box.
+      Text {
+        visible: row.later
+        anchors.top: parent.top
+        width: Style.space(15)
+        height: row.lineHeight
+        horizontalAlignment: Text.AlignHCenter
+        verticalAlignment: Text.AlignVCenter
+        textFormat: Text.PlainText
+        text: "·"
+        color: root.fg
+        opacity: 0.55
+        font.family: root.family
+        font.pixelSize: Style.font.body
+        font.bold: true
+      }
+
       Rectangle {
         id: box
+        visible: !row.later
         anchors.top: parent.top
         anchors.topMargin: Math.round(Math.max(0, (row.lineHeight - height) / 2))
         width: Style.space(15)
@@ -789,10 +916,22 @@ Panel {
 
       RowAction {
         anchors.verticalCenter: parent.verticalCenter
-        visible: row.hot && !row.editing && (row.kind === "big3" || !root.store || !root.store.big3Full)
+        visible: row.hot && !row.editing && !row.later && (row.kind === "big3" || !root.store || !root.store.big3Full)
         glyph: row.kind === "big3" ? "▾" : "▴"
         tip: row.kind === "big3" ? "Move out of the Big 3" : "Promote to the Big 3"
         onTriggered: if (root.store) root.store.shift(row.kind, row.item.id)
+      }
+
+      RowAction {
+        anchors.verticalCenter: parent.verticalCenter
+        visible: row.hot && !row.editing && (row.later || !row.done)
+        glyph: row.later ? "↑" : "↓"
+        tip: row.later ? "Do today" : "Save for later"
+        onTriggered: {
+          if (!root.store) return
+          if (row.later) root.store.pull(row.item.id)
+          else root.store.defer(row.kind, row.item.id)
+        }
       }
 
       RowAction {

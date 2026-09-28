@@ -86,6 +86,7 @@ and at panel size.
   reacting to.
 - **The Big 3** — three slots, capped. The next free slot *is* the input.
 - **Todos** — everything else, with `clear N done` in the section header.
+- **Later** — folded away; see below.
 - **Last 14 days** — a bar per day, today outlined, plus streak and all-time.
 
 Rows: click to toggle, right-click or double-click to edit, hover for
@@ -95,7 +96,21 @@ sliding should be visible, not quietly accumulating.
 
 Keyboard: `↑↓`/`jk` move · `space`/`enter` toggle · `e` edit · `←→`/`hl` move
 between the Big 3 and the rest · `J`/`K` reorder · `x` delete · `a` add a todo ·
-`b` add to the Big 3 · `c` clear completed · `esc` close.
+`b` add to the Big 3 · `l` add to Later · `t` send to Later / pull into today ·
+`c` clear completed · `esc` close.
+
+## Later
+
+Somewhere to park things you have to do, just not today. Later belongs to no
+day: it never carries over, never counts toward `done/total`, and Pip never
+sees it.
+
+It sits folded under Todos as `▸ LATER · N`. Once the oldest note has waited a
+week the header says so, dimly — and that is as loud as it gets.
+
+- `↑` on a note (or clicking it) moves it into today as a regular todo; from
+  there ordinary carry-over applies.
+- `↓` on an unfinished todo sends it back, with its carry count reset.
 
 ## Carry-over
 
@@ -119,6 +134,7 @@ The plugin registers an IPC target, so anything can drive it:
 omarchy-shell io.github.saikomantisu.todos status              # "2/7 Worried"
 omarchy-shell io.github.saikomantisu.todos add "Water plants"
 omarchy-shell io.github.saikomantisu.todos big3 "Ship the thing"
+omarchy-shell io.github.saikomantisu.todos later "Renew passport"   # quiet: no panel
 omarchy-shell io.github.saikomantisu.todos toggle              # panel
 omarchy-shell io.github.saikomantisu.todos capture             # panel, focused on the add field
 ```
@@ -155,7 +171,8 @@ Nothing is uploaded and there is no account. Days are kept for 400 days.
       "big3":  [ { "id": "…", "text": "…", "done": true, "completedAt": "…" } ],
       "todos": [ { "id": "…", "text": "…", "done": false, "carries": 3 } ]
     }
-  }
+  },
+  "later": [ { "id": "…", "text": "…", "done": false } ]
 }
 ```
 
