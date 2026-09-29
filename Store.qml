@@ -22,6 +22,7 @@ Item {
   property bool loaded: false
   property bool directoryReady: false
   property bool writePending: false
+  property bool readPending: false
 
   property date now: new Date()
   property string todayKey: Model.dayKey(new Date())
@@ -70,6 +71,17 @@ Item {
       persist()
       if (rolled.carried > 0) root.rolledOver(rolled.carried)
     }
+  }
+
+  // Every read goes through here. The file is ours but anything can write to
+  // it, so it is size-checked before a single byte reaches the JS heap.
+  function load() {
+    if (reader.running) {
+      root.readPending = true
+      return
+    }
+    root.readPending = false
+    reader.running = true
   }
 
   function persist() {
@@ -159,17 +171,35 @@ Item {
     onDateChanged: root.tick()
   }
 
+  // Write-and-watch only. FileView reads a file whole with no size limit, so
+  // it never loads anything here (preload off, no reload()); `reader` does.
   FileView {
     id: file
     path: root.path
+    preload: false
     watchChanges: true
     atomicWrites: true
     printErrors: false
-    onLoaded: root.adopt(text())
-    // First run: no file yet. Adopting an empty history creates today and
-    // writes it, which is also what creates the file.
-    onLoadFailed: root.adopt("")
-    onFileChanged: reload()
+    onFileChanged: root.load()
+  }
+
+  // Exit 3: no file yet (first run). Adopting an empty history creates today
+  // and writes it, which is also what creates the file. Exit 4: over the size
+  // cap, refused without reading. `head -c` bounds the read even if the file
+  // grows between the size check and the read.
+  Process {
+    id: reader
+    command: ["sh", "-c",
+      '[ -e "$1" ] || exit 3; [ "$(wc -c < "$1")" -le "$2" ] || exit 4; exec head -c "$2" -- "$1"',
+      "sh", root.path, String(Model.MAX_FILE_BYTES)]
+    stdout: StdioCollector { id: readOut }
+    onExited: function(code) {
+      if (code === 0) root.adopt(readOut.text)
+      else if (code === 3) root.adopt("")
+      else if (code === 4) console.warn("io.github.saikomantisu.todos: history file is larger than " + Model.MAX_FILE_BYTES + " bytes; not reading it")
+      else console.warn("io.github.saikomantisu.todos: could not read the history file (exit " + code + ")")
+      if (root.readPending) root.load()
+    }
   }
 
   // FileView can't create the directory it writes into, and on a fresh install
@@ -180,7 +210,7 @@ Item {
     onExited: {
       root.directoryReady = true
       if (root.writePending) root.persist()
-      else file.reload()
+      else root.load()
     }
   }
 

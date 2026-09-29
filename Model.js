@@ -35,6 +35,12 @@ var MAX_TODOS = 100
 var MAX_LATER = 200
 var MAX_TEXT = 200
 var HISTORY_DAYS = 400
+var MAX_FIELD = 64
+
+// The largest history file we will read. A full 400 days at realistic sizes
+// is well under a megabyte; this leaves generous headroom while keeping a
+// runaway or hostile file from being parsed into the long-lived shell.
+var MAX_FILE_BYTES = 4 * 1024 * 1024
 
 // ---------------------------------------------------------------- utilities
 
@@ -59,6 +65,14 @@ function cleanText(value) {
   var text = String(value === undefined || value === null ? "" : value)
   text = text.replace(/\s+/g, " ").replace(/^ +| +$/g, "")
   return text.length > MAX_TEXT ? text.slice(0, MAX_TEXT) : text
+}
+
+// Stored metadata (ids, timestamps) is ours and short. Cap it anyway so a
+// hand-edited file cannot make us hold on to arbitrarily long strings.
+function cleanField(value) {
+  if (!value) return ""
+  var text = String(value)
+  return text.length > MAX_FIELD ? text.slice(0, MAX_FIELD) : text
 }
 
 function isDayKey(value) {
@@ -97,20 +111,20 @@ function sanitizeItem(value) {
 
   var done = value.done === true
   return {
-    id: value.id ? String(value.id) : newId(),
+    id: cleanField(value.id) || newId(),
     text: text,
     done: done,
-    createdAt: value.createdAt ? String(value.createdAt) : "",
-    completedAt: done && value.completedAt ? String(value.completedAt) : "",
-    firstSeen: value.firstSeen ? String(value.firstSeen) : "",
-    carriedFrom: value.carriedFrom ? String(value.carriedFrom) : "",
+    createdAt: cleanField(value.createdAt),
+    completedAt: done ? cleanField(value.completedAt) : "",
+    firstSeen: cleanField(value.firstSeen),
+    carriedFrom: cleanField(value.carriedFrom),
     carries: Math.max(0, Math.round(Number(value.carries) || 0))
   }
 }
 
 function sanitizeList(value, limit) {
   var out = []
-  if (!value || value.length === undefined) return out
+  if (!Array.isArray(value)) return out
   for (var i = 0; i < value.length && out.length < limit; i++) {
     var item = sanitizeItem(value[i])
     if (item) out.push(item)
@@ -127,27 +141,36 @@ function sanitizeDay(value, key) {
   }
 }
 
-// A malformed or missing file is not an error worth surfacing — it is just an
-// empty history. Losing a corrupt file's contents beats refusing to run.
-function parseState(raw) {
+// Turn an already-parsed file into state. Only the newest HISTORY_DAYS days
+// are sanitized: the retention limit is applied to the keys first, so a file
+// padded with thousands of days costs a key sort, not a copy of every day.
+function stateFromParsed(parsed) {
   var state = emptyState()
-  if (!raw) return state
-
-  var parsed = null
-  try {
-    parsed = JSON.parse(raw)
-  } catch (e) {
-    return state
-  }
   if (!parsed || typeof parsed !== "object") return state
 
   var days = parsed.days && typeof parsed.days === "object" ? parsed.days : {}
+  var keys = []
   for (var key in days) {
-    if (!isDayKey(key)) continue
-    state.days[key] = sanitizeDay(days[key], key)
+    if (isDayKey(key)) keys.push(key)
   }
+  keys.sort()
+  if (keys.length > HISTORY_DAYS) keys = keys.slice(keys.length - HISTORY_DAYS)
+
+  for (var i = 0; i < keys.length; i++)
+    state.days[keys[i]] = sanitizeDay(days[keys[i]], keys[i])
   state.later = sanitizeList(parsed.later, MAX_LATER)
   return state
+}
+
+// A malformed or missing file is not an error worth surfacing — it is just an
+// empty history. Losing a corrupt file's contents beats refusing to run.
+function parseState(raw) {
+  if (!raw || String(raw).length > MAX_FILE_BYTES) return emptyState()
+  try {
+    return stateFromParsed(JSON.parse(raw))
+  } catch (e) {
+    return emptyState()
+  }
 }
 
 function dayCount(state) {
@@ -167,6 +190,11 @@ function readState(raw) {
   if (text.replace(/^\s+|\s+$/g, "").length === 0)
     return { state: emptyState(), ok: true, empty: true }
 
+  // Characters, not bytes, but never more than bytes: the reader caps the
+  // byte count before we get here, this is the backstop.
+  if (text.length > MAX_FILE_BYTES)
+    return { state: emptyState(), ok: false, empty: false }
+
   var parsed = null
   try {
     parsed = JSON.parse(text)
@@ -176,7 +204,7 @@ function readState(raw) {
   if (!parsed || typeof parsed !== "object")
     return { state: emptyState(), ok: false, empty: false }
 
-  var state = parseState(text)
+  var state = stateFromParsed(parsed)
   return { state: state, ok: true, empty: dayCount(state) === 0 }
 }
 
